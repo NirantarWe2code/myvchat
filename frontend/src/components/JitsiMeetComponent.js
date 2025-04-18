@@ -7,7 +7,7 @@ import { JitsiMeeting } from "@jitsi/react-sdk";
  * A flexible Jitsi Meet integration component with:
  * - Dynamic room creation
  * - Configurable display name
- * - Moderator mode
+ * - Enhanced moderator mode
  * - Responsive design
  *
  * Key Features:
@@ -16,15 +16,10 @@ import { JitsiMeeting } from "@jitsi/react-sdk";
  * - Customizable Jitsi Meet settings
  * - Tailwind CSS styling
  *
- * Workflow:
- * 1. User enters room name and display name
- * 2. Optional moderator selection
- * 3. Start meeting with custom configurations
- *
- * Moderator Capabilities:
- * - Identify as a moderator
- * - Additional control options
- * - Enhanced meeting management
+ * Moderator Enhancements:
+ * - Automatic meeting start
+ * - Bypass waiting rooms
+ * - Full control over meeting settings
  */
 function JitsiMeetComponent() {
   // State management for meeting configuration
@@ -136,11 +131,27 @@ function JitsiMeetComponent() {
             domain="meet.jit.si"
             roomName={roomName}
             configOverwrite={{
-              startWithAudioMuted: true,
+              // Moderator-specific configurations
+              startWithAudioMuted: false,
               startWithVideoMuted: false,
               enableModeratorIndicator: true,
               requireDisplayName: true,
-              prejoinPageEnabled: true,
+              prejoinPageEnabled: false, // Disable pre-join page
+
+              // Moderator bypass settings
+              breakoutRooms: {
+                hideAddRoomButton: false,
+                hideAutoAssignButton: false,
+              },
+
+              // Additional moderator controls
+              disableModeratorIndicator: false,
+              enableLobby: isModerator ? false : true, // Disable lobby for moderator
+
+              // Meeting start and control settings
+              startAudioOnly: false,
+              startVideoMuted: false,
+              startWithAudioMuted: false,
             }}
             interfaceConfigOverwrite={{
               SHOW_JITSI_WATERMARK: false,
@@ -173,6 +184,7 @@ function JitsiMeetComponent() {
             }}
             userInfo={{
               displayName: displayName,
+              // Set moderator status
               moderator: isModerator,
             }}
             onReadyToClose={handleOnClose}

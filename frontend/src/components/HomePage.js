@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
@@ -9,12 +9,14 @@ import { useNavigate } from "react-router-dom";
  * Key Features:
  * - Create new video call room
  * - Join existing room by ID
+ * - 8x8 Jitsi Meet integration
  * - Dynamic app naming via environment variables
  * - Responsive design with Tailwind CSS
  *
  * Workflow:
  * 1. User can create a new room automatically
  * 2. User can join an existing room by entering room ID
+ * 3. Option to start 8x8 Jitsi Meet meeting
  *
  * Environment Variables:
  * - REACT_APP_API_BASE_URL: Backend API endpoint
@@ -23,6 +25,7 @@ import { useNavigate } from "react-router-dom";
 function HomePage() {
   // State management for room ID input
   const [roomId, setRoomId] = useState("");
+  const [showJitsiMeet, setShowJitsiMeet] = useState(false);
 
   // Navigation hook for programmatic routing
   const navigate = useNavigate();
@@ -30,6 +33,53 @@ function HomePage() {
   // API base URL with fallback
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "https://apichat.doc247.ca";
+
+  // 8x8 Jitsi Meet configuration
+  const JITSI_ROOM_NAME =
+    "vpaas-magic-cookie-a4111ebeampleAppPoliteFactionsWarnUndoubtedly";
+
+  // Load external Jitsi Meet script
+  useEffect(() => {
+    if (showJitsiMeet) {
+      const script = document.createElement("script");
+      script.src = "https://8x8.vc/external_api.js";
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        if (window.JitsiMeetExternalAPI) {
+          const api = new window.JitsiMeetExternalAPI("8x8.vc", {
+            roomName: JITSI_ROOM_NAME,
+            parentNode: document.querySelector("#jaas-container"),
+            // Uncomment and add JWT for premium features
+            // jwt: "your-jwt-token"
+
+            // Additional configuration options
+            width: "100%",
+            height: "100%",
+            configOverwrite: {
+              startWithAudioMuted: false,
+              startWithVideoMuted: false,
+            },
+            interfaceConfigOverwrite: {
+              SHOW_JITSI_WATERMARK: false,
+              SHOW_WATERMARK_FOR_GUESTS: false,
+            },
+          });
+
+          // Optional: Add event listeners
+          api.on("readyToClose", () => {
+            setShowJitsiMeet(false);
+          });
+        }
+      };
+
+      // Cleanup script on component unmount
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [showJitsiMeet]);
 
   /**
    * Creates a new video call room
@@ -56,6 +106,25 @@ function HomePage() {
     }
   };
 
+  // Render Jitsi Meet container
+  if (showJitsiMeet) {
+    return (
+      <div className="fixed inset-0 z-50">
+        <div
+          id="jaas-container"
+          className="w-full h-full"
+          style={{ position: "absolute", top: 0, left: 0 }}
+        />
+        <button
+          onClick={() => setShowJitsiMeet(false)}
+          className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded z-60"
+        >
+          Close Meeting
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-16 text-center">
       {/* Dynamic Application Title */}
@@ -64,13 +133,21 @@ function HomePage() {
       </h1>
 
       {/* Room Creation and Joining Container */}
-      <div className="max-w-md mx-auto bg-white shadow-lg rounded-lg p-8">
+      <div className="max-w-md mx-auto bg-white shadow-lg rounded-lg p-8 space-y-4">
         {/* Create New Room Button */}
         <button
           onClick={createNewRoom}
-          className="w-full bg-primary text-white py-3 rounded-lg mb-4 hover:bg-blue-700 transition duration-300"
+          className="w-full bg-primary text-white py-3 rounded-lg hover:bg-blue-700 transition duration-300"
         >
           Create New Room
+        </button>
+
+        {/* 8x8 Jitsi Meet Button */}
+        <button
+          onClick={() => setShowJitsiMeet(true)}
+          className="w-full bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition duration-300"
+        >
+          Start 8x8 Jitsi Meet
         </button>
 
         {/* Divider */}
