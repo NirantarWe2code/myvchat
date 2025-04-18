@@ -146,6 +146,14 @@ function VideoCallRoom() {
             setParticipants(message.participants);
             break;
 
+          case "answer":
+            handleAnswer(message.answer);
+            break;
+
+          case "ice-candidate":
+            handleIceCandidate(message.candidate);
+            break;
+
           default:
             console.log("Unhandled message type:", message.type);
         }
@@ -165,8 +173,26 @@ function VideoCallRoom() {
   const createPeerConnection = useCallback(() => {
     const configuration = {
       iceServers: [
+        // Google STUN servers
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+
+        // Twilio STUN servers
+        { urls: "stun:global.stun.twilio.com:3478" },
+
+        // Mozilla STUN servers
+        { urls: "stun:stun.services.mozilla.com" },
+
+        // Xirsys STUN servers (free tier)
+        { urls: "stun:stun.xirsys.com" },
+
+        // Additional reliable STUN servers
+        { urls: "stun:stun.sipnet.net:3478" },
+        { urls: "stun:stun.sipnet.ru:3478" },
+        { urls: "stun:stun.stunprotocol.org:3478" },
       ],
     };
 
@@ -291,6 +317,34 @@ function VideoCallRoom() {
       setIsVideoOff(!isVideoOff);
     }
   }, [localStreamRef, isVideoOff]);
+
+  // Handle receiving an answer from the remote peer
+  const handleAnswer = useCallback(async (answer) => {
+    try {
+      if (peerConnectionRef.current) {
+        await peerConnectionRef.current.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
+        console.log("Remote description set successfully");
+      }
+    } catch (error) {
+      console.error("Error setting remote description:", error);
+    }
+  }, []);
+
+  // Handle receiving ICE candidates
+  const handleIceCandidate = useCallback((candidate) => {
+    try {
+      if (peerConnectionRef.current && candidate) {
+        peerConnectionRef.current.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
+        console.log("ICE candidate added successfully");
+      }
+    } catch (error) {
+      console.error("Error adding ICE candidate:", error);
+    }
+  }, []);
 
   // WebRTC setup effect
   useEffect(() => {

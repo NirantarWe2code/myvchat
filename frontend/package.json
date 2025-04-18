@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@jitsi/react-sdk": "^1.4.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.3",
@@ -10,10 +11,10 @@
     "webrtc-adapter": "^8.2.3"
   },
   "devDependencies": {
-    "react-scripts": "^5.0.1",
-    "tailwindcss": "^3.4.3",
+    "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
-    "autoprefixer": "^10.4.19"
+    "react-scripts": "^5.0.1",
+    "tailwindcss": "^3.4.3"
   },
   "scripts": {
     "start": "react-scripts start",
