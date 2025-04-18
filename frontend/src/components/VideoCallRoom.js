@@ -8,14 +8,19 @@ function VideoCallRoom() {
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
+  // Use environment variables for WebSocket configuration
+  const WS_BASE_URL =
+    process.env.REACT_APP_WS_BASE_URL || "ws://localhost:8000";
+  const ENABLE_CHAT = process.env.REACT_APP_ENABLE_CHAT === "true";
+
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const websocketRef = useRef(null);
   const peerConnectionRef = useRef(null);
 
   useEffect(() => {
-    // WebSocket connection
-    const ws = new WebSocket(`ws://localhost:8000/ws/${roomId}`);
+    // WebSocket connection using environment variable
+    const ws = new WebSocket(`${WS_BASE_URL}/ws/${roomId}`);
     websocketRef.current = ws;
 
     ws.onopen = () => {
@@ -32,7 +37,7 @@ function VideoCallRoom() {
         message.type === "ice-candidate"
       ) {
         handleSignalingData(message);
-      } else if (message.type === "chat") {
+      } else if (message.type === "chat" && ENABLE_CHAT) {
         setMessages((prev) => [...prev, message]);
       }
     };
@@ -112,6 +117,11 @@ function VideoCallRoom() {
   };
 
   const sendMessage = () => {
+    if (!ENABLE_CHAT) {
+      console.warn("Chat is currently disabled");
+      return;
+    }
+
     if (newMessage.trim()) {
       const message = {
         type: "chat",
@@ -147,7 +157,7 @@ function VideoCallRoom() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Video Section */}
-      <div className="w-2/3 p-4 flex flex-col">
+      <div className={`${ENABLE_CHAT ? "w-2/3" : "w-full"} p-4 flex flex-col`}>
         <div className="flex-grow flex space-x-4">
           <div className="w-1/2 bg-gray-200 rounded-lg overflow-hidden">
             <video
@@ -187,40 +197,42 @@ function VideoCallRoom() {
         </div>
       </div>
 
-      {/* Chat Section */}
-      <div className="w-1/3 bg-white p-4 border-l flex flex-col">
-        <div className="flex-grow overflow-y-auto mb-4">
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`mb-2 p-2 rounded ${
-                msg.sender === "Me"
-                  ? "bg-primary text-white self-end"
-                  : "bg-gray-200 text-black self-start"
-              }`}
-            >
-              {msg.text}
-            </div>
-          ))}
-        </div>
+      {/* Conditionally render chat section based on feature flag */}
+      {ENABLE_CHAT && (
+        <div className="w-1/3 bg-white p-4 border-l flex flex-col">
+          <div className="flex-grow overflow-y-auto mb-4">
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`mb-2 p-2 rounded ${
+                  msg.sender === "Me"
+                    ? "bg-primary text-white self-end"
+                    : "bg-gray-200 text-black self-start"
+                }`}
+              >
+                {msg.text}
+              </div>
+            ))}
+          </div>
 
-        <div className="flex">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
-            className="flex-grow p-2 border rounded-l-lg"
-          />
-          <button
-            onClick={sendMessage}
-            className="bg-secondary text-white px-4 rounded-r-lg"
-          >
-            Send
-          </button>
+          <div className="flex">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Type a message..."
+              className="flex-grow p-2 border rounded-l-lg"
+            />
+            <button
+              onClick={sendMessage}
+              className="bg-secondary text-white px-4 rounded-r-lg"
+            >
+              Send
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

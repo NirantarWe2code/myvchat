@@ -3,13 +3,21 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import json
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 
-# CORS configuration
+# CORS configuration from environment variables
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '["*"]')
+ALLOWED_ORIGINS = eval(ALLOWED_ORIGINS)  # Convert string to list
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,4 +68,7 @@ async def create_room():
     return {"room_id": room_id}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    # Use environment variables for host and port
+    host = os.getenv('APP_HOST', '0.0.0.0')
+    port = int(os.getenv('APP_PORT', 8000))
+    uvicorn.run(app, host=host, port=port) 

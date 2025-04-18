@@ -5,9 +5,12 @@ function HomePage() {
   const [roomId, setRoomId] = useState("");
   const navigate = useNavigate();
 
+  const API_BASE_URL =
+    process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
+
   const createNewRoom = async () => {
     try {
-      const response = await fetch("http://localhost:8000/create-room");
+      const response = await fetch(`${API_BASE_URL}/create-room`);
       const data = await response.json();
       navigate(`/room/${data.room_id}`);
     } catch (error) {
@@ -23,7 +26,9 @@ function HomePage() {
 
   return (
     <div className="container mx-auto px-4 py-16 text-center">
-      <h1 className="text-4xl font-bold mb-8 text-primary">Video Call App</h1>
+      <h1 className="text-4xl font-bold mb-8 text-primary">
+        {process.env.REACT_APP_APP_NAME || "Video Call App"}
+      </h1>
 
       <div className="max-w-md mx-auto bg-white shadow-lg rounded-lg p-8">
         <button
