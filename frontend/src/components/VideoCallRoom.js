@@ -7,7 +7,19 @@ import React, {
 } from "react";
 import { useParams } from "react-router-dom";
 
-// Custom hook for WebSocket connection
+/**
+ * Custom WebSocket Hook for Managing Real-time Connections
+ *
+ * Features:
+ * - Manages WebSocket connection lifecycle
+ * - Handles connection, disconnection, and message sending
+ * - Provides reconnection mechanism
+ * - Error handling and connection status tracking
+ *
+ * @param {string} url - WebSocket connection URL
+ * @param {Object} options - Configuration options for WebSocket
+ * @returns {Object} WebSocket connection utilities
+ */
 function useWebSocket(url, options = {}) {
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
   const [error, setError] = useState(null);
@@ -86,6 +98,27 @@ function useWebSocket(url, options = {}) {
   };
 }
 
+/**
+ * VideoCallRoom Component
+ *
+ * A comprehensive video communication room with:
+ * - WebRTC Peer Connection
+ * - WebSocket Signaling
+ * - Real-time Chat
+ * - Media Controls (Mute/Unmute, Video On/Off)
+ * - Participant Management
+ *
+ * Key Features:
+ * - Dynamic room joining via URL parameter
+ * - Configurable via environment variables
+ * - Adaptive UI based on chat enable/disable flag
+ * - WebRTC peer connection with STUN servers
+ * - Real-time messaging
+ *
+ * Environment Variables:
+ * - REACT_APP_WS_BASE_URL: WebSocket base URL
+ * - REACT_APP_ENABLE_CHAT: Enable/disable chat functionality
+ */
 function VideoCallRoom() {
   const { roomId } = useParams();
   const [messages, setMessages] = useState([]);
@@ -360,7 +393,7 @@ function VideoCallRoom() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Connection Status and Error Display */}
+      {/* Connection Status Display */}
       <div className="p-2 text-center bg-gray-100">
         Connection Status: {connectionStatus}
         {wsError && (
@@ -368,12 +401,15 @@ function VideoCallRoom() {
         )}
       </div>
 
+      {/* Main Video and Chat Layout */}
       <div className="flex flex-grow">
         {/* Video Section */}
         <div
           className={`${ENABLE_CHAT ? "w-2/3" : "w-full"} p-4 flex flex-col`}
         >
+          {/* Local and Remote Video Streams */}
           <div className="flex-grow flex space-x-4">
+            {/* Local Video */}
             <div className="w-1/2 bg-gray-200 rounded-lg overflow-hidden">
               <video
                 ref={localVideoRef}
@@ -382,6 +418,7 @@ function VideoCallRoom() {
                 className="w-full h-full object-cover"
               />
             </div>
+            {/* Remote Video */}
             <div className="w-1/2 bg-gray-200 rounded-lg overflow-hidden">
               <video
                 ref={remoteVideoRef}
@@ -391,7 +428,7 @@ function VideoCallRoom() {
             </div>
           </div>
 
-          {/* Controls */}
+          {/* Media Control Buttons */}
           <div className="mt-4 flex justify-center space-x-4">
             <button
               onClick={toggleMic}
@@ -412,10 +449,10 @@ function VideoCallRoom() {
           </div>
         </div>
 
-        {/* Conditionally render chat section based on feature flag */}
+        {/* Conditional Chat Section */}
         {ENABLE_CHAT && (
           <div className="w-1/3 bg-white p-4 border-l flex flex-col">
-            {/* Participants Section */}
+            {/* Participants List */}
             <div className="mb-4">
               <h3 className="font-bold mb-2">
                 Participants ({participants.length})
@@ -429,7 +466,7 @@ function VideoCallRoom() {
               </div>
             </div>
 
-            {/* Messages Section */}
+            {/* Chat Messages */}
             <div className="flex-grow overflow-y-auto mb-4">
               {messages.map((msg, index) => (
                 <div
