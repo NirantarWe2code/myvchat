@@ -29,6 +29,7 @@ function App() {
               </Link>
             </li>
             <li>
+              {/*  */}
               <Link
                 to="/jitsi-meet"
                 className="hover:text-secondary transition duration-300"
