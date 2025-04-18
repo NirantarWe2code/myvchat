@@ -7,9 +7,15 @@ import os
 import logging
 from dotenv import load_dotenv
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure more detailed logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('websocket_debug.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -36,6 +42,8 @@ rooms = {}
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
     
+    logger.info(f"New WebSocket connection for room: {room_id}")
+    
     # Create room if it doesn't exist
     if room_id not in rooms:
         rooms[room_id] = {
@@ -49,9 +57,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            logger.info(f"Received message in room {room_id}: {message}")
+            try:
+                message = json.loads(data)
+                logger.debug(f"Received message in room {room_id}: {message}")
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON received: {data}")
+                continue
             
             # Handle different message types
             if message.get('type') == 'join_room':
@@ -64,15 +75,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 
                 # Broadcast updated participant list
                 participants = list(rooms[room_id]['connections'].keys())
-                for conn in rooms[room_id]['connections'].values():
-                    await conn.send_text(json.dumps({
-                        'type': 'room_participants',
-                        'participants': participants
-                    }))
+                broadcast_message = {
+                    'type': 'room_participants',
+                    'participants': participants
+                }
+                
+                for participant_id, conn in rooms[room_id]['connections'].items():
+                    try:
+                        await conn.send_text(json.dumps(broadcast_message))
+                        logger.debug(f"Sent participant list to {participant_id}")
+                    except Exception as e:
+                        logger.error(f"Error broadcasting to {participant_id}: {e}")
             
             elif message.get('type') in ['offer', 'answer', 'ice-candidate', 'chat']:
                 # Broadcast to all other connections in the room
-                logger.info(f"Broadcasting message in room {room_id}: {message}")
+                logger.debug(f"Broadcasting {message.get('type')} message in room {room_id}")
                 
                 broadcast_count = 0
                 for other_user_id, conn in rooms[room_id]['connections'].items():
@@ -80,8 +97,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                         try:
                             await conn.send_text(json.dumps(message))
                             broadcast_count += 1
+                            logger.debug(f"Sent message to {other_user_id}")
                         except Exception as e:
-                            logger.error(f"Error broadcasting to user {other_user_id}: {e}")
+                            logger.error(f"Error sending to {other_user_id}: {e}")
                 
                 logger.info(f"Message broadcast to {broadcast_count} other users")
                 
@@ -101,15 +119,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
             # Broadcast updated participant list
             participants = list(rooms[room_id]['connections'].keys())
             for conn in rooms[room_id]['connections'].values():
-                await conn.send_text(json.dumps({
-                    'type': 'room_participants',
-                    'participants': participants
-                }))
+                try:
+                    await conn.send_text(json.dumps({
+                        'type': 'room_participants',
+                        'participants': participants
+                    }))
+                except Exception as e:
+                    logger.error(f"Error broadcasting participant update: {e}")
             
             # If no more connections, optionally clean up the room
             if not rooms[room_id]['connections']:
                 del rooms[room_id]
-
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in WebSocket handler: {e}")
+        
 @app.get("/create-room")
 async def create_room():
     """Generate a unique room ID"""

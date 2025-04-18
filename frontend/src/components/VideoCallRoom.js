@@ -7,13 +7,91 @@ import React, {
 } from "react";
 import { useParams } from "react-router-dom";
 
+// Custom hook for WebSocket connection
+function useWebSocket(url, options = {}) {
+  const [connectionStatus, setConnectionStatus] = useState("Disconnected");
+  const [error, setError] = useState(null);
+  const websocketRef = useRef(null);
+
+  const connect = useCallback(() => {
+    try {
+      const ws = new WebSocket(url);
+      websocketRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("WebSocket Connected");
+        setConnectionStatus("Connected");
+        if (options.onOpen) options.onOpen(ws);
+      };
+
+      ws.onmessage = (event) => {
+        console.log("WebSocket Message:", event.data);
+        if (options.onMessage) options.onMessage(event);
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket Error:", error);
+        setError(error);
+        setConnectionStatus("Error");
+        if (options.onError) options.onError(error);
+      };
+
+      ws.onclose = (event) => {
+        console.log("WebSocket Disconnected:", event);
+        setConnectionStatus("Disconnected");
+        if (options.onClose) options.onClose(event);
+
+        // Attempt reconnection
+        setTimeout(connect, 3000);
+      };
+
+      return ws;
+    } catch (err) {
+      console.error("WebSocket Connection Error:", err);
+      setError(err);
+      setConnectionStatus("Error");
+      return null;
+    }
+  }, [
+    url,
+    options.onOpen,
+    options.onMessage,
+    options.onError,
+    options.onClose,
+  ]);
+
+  const sendMessage = useCallback((message) => {
+    if (
+      websocketRef.current &&
+      websocketRef.current.readyState === WebSocket.OPEN
+    ) {
+      try {
+        websocketRef.current.send(JSON.stringify(message));
+        console.log("Message sent:", message);
+      } catch (err) {
+        console.error("Error sending message:", err);
+        setError(err);
+      }
+    } else {
+      console.warn("WebSocket not open. Message not sent.");
+    }
+  }, []);
+
+  return {
+    websocket: websocketRef.current,
+    connectionStatus,
+    error,
+    connect,
+    sendMessage,
+  };
+}
+
 function VideoCallRoom() {
   const { roomId } = useParams();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const [participants, setParticipants] = useState([]);
 
   // Memoize environment variables
@@ -26,12 +104,62 @@ function VideoCallRoom() {
     []
   );
 
+  // Generate unique user ID
+  const userIdRef = useRef(`user-${Math.random().toString(36).substr(2, 9)}`);
+
+  // WebSocket connection
+  const {
+    websocket,
+    connectionStatus,
+    error: wsError,
+    sendMessage: sendWsMessage,
+  } = useWebSocket(`${WS_BASE_URL}/ws/${roomId}`, {
+    onOpen: (ws) => {
+      // Send join room message
+      sendWsMessage({
+        type: "join_room",
+        roomId: roomId,
+        userId: userIdRef.current,
+      });
+    },
+    onMessage: (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log("Received message:", message);
+
+        switch (message.type) {
+          case "chat":
+            if (ENABLE_CHAT) {
+              setMessages((prev) => {
+                const isDuplicate = prev.some(
+                  (m) =>
+                    m.text === message.text &&
+                    m.sender === message.sender &&
+                    m.timestamp === message.timestamp
+                );
+                return isDuplicate ? prev : [...prev, message];
+              });
+            }
+            break;
+
+          case "room_participants":
+            setParticipants(message.participants);
+            break;
+
+          default:
+            console.log("Unhandled message type:", message.type);
+        }
+      } catch (err) {
+        console.error("Error processing message:", err);
+      }
+    },
+  });
+
+  // Local video and WebRTC references
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
-  const websocketRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
-  const userIdRef = useRef(null);
 
   // Memoize createPeerConnection to prevent unnecessary recreations
   const createPeerConnection = useCallback(() => {
@@ -46,30 +174,28 @@ function VideoCallRoom() {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        websocketRef.current?.send(
-          JSON.stringify({
-            type: "ice-candidate",
-            candidate: event.candidate,
-            roomId: roomId,
-            userId: userIdRef.current,
-          })
-        );
+        sendWsMessage({
+          type: "ice-candidate",
+          candidate: event.candidate,
+          roomId: roomId,
+          userId: userIdRef.current,
+        });
       }
     };
 
     pc.onconnectionstatechange = () => {
       switch (pc.connectionState) {
         case "connected":
-          setConnectionStatus("Connected");
+          console.log("Peer connection established");
           break;
         case "disconnected":
-          setConnectionStatus("Disconnected");
+          console.log("Peer connection disconnected");
           break;
         case "failed":
-          setConnectionStatus("Connection Failed");
+          console.error("Peer connection failed");
           break;
         default:
-          setConnectionStatus("Connecting...");
+          console.log("Peer connection state:", pc.connectionState);
       }
     };
 
@@ -80,7 +206,7 @@ function VideoCallRoom() {
     };
 
     return pc;
-  }, [roomId]);
+  }, [roomId, sendWsMessage]);
 
   // Memoize setupWebRTC to optimize performance
   const setupWebRTC = useCallback(async () => {
@@ -116,161 +242,33 @@ function VideoCallRoom() {
       await pc.setLocalDescription(offer);
 
       // Send offer via WebSocket
-      websocketRef.current?.send(
-        JSON.stringify({
-          type: "offer",
-          offer: offer,
-          roomId: roomId,
-          userId: userIdRef.current,
-        })
-      );
+      sendWsMessage({
+        type: "offer",
+        offer: offer,
+        roomId: roomId,
+        userId: userIdRef.current,
+      });
     } catch (error) {
       console.error("Error setting up WebRTC:", error);
-      setConnectionStatus("Error setting up connection");
     }
-  }, [createPeerConnection, isVideoOff, isMicMuted, roomId]);
+  }, [createPeerConnection, isVideoOff, isMicMuted, roomId, sendWsMessage]);
 
-  // Memoize message sending function
+  // Send message handler
   const sendMessage = useCallback(() => {
-    if (!ENABLE_CHAT) {
-      console.warn("Chat is currently disabled");
-      return;
-    }
+    if (!ENABLE_CHAT || !newMessage.trim()) return;
 
-    if (newMessage.trim() && websocketRef.current) {
-      const message = {
-        type: "chat",
-        text: newMessage,
-        sender: userIdRef.current,
-        roomId: roomId,
-        timestamp: new Date().toISOString(),
-      };
-
-      console.log("Sending chat message:", message);
-      websocketRef.current.send(JSON.stringify(message));
-      setMessages((prev) => [...prev, message]);
-      setNewMessage("");
-    }
-  }, [ENABLE_CHAT, newMessage, roomId]);
-
-  // WebSocket and WebRTC setup effect
-  useEffect(() => {
-    // Generate a unique user ID if not already set
-    if (!userIdRef.current) {
-      userIdRef.current = `user-${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    // WebSocket connection
-    const ws = new WebSocket(`${WS_BASE_URL}/ws/${roomId}`);
-    websocketRef.current = ws;
-
-    ws.onopen = () => {
-      console.log("WebSocket connection established");
-      setConnectionStatus("Connected to WebSocket");
-
-      // Send a join room message
-      ws.send(
-        JSON.stringify({
-          type: "join_room",
-          roomId: roomId,
-          userId: userIdRef.current,
-        })
-      );
+    const message = {
+      type: "chat",
+      text: newMessage,
+      sender: userIdRef.current,
+      roomId: roomId,
+      timestamp: new Date().toISOString(),
     };
 
-    ws.onmessage = async (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log("Received WebSocket message:", message);
-
-        switch (message.type) {
-          case "offer":
-            // Only process offer if it's not from our own connection
-            if (message.userId !== userIdRef.current) {
-              const pc = peerConnectionRef.current || createPeerConnection();
-              await pc.setRemoteDescription(
-                new RTCSessionDescription(message.offer)
-              );
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              ws.send(
-                JSON.stringify({
-                  type: "answer",
-                  answer: answer,
-                  roomId: roomId,
-                  userId: userIdRef.current,
-                })
-              );
-            }
-            break;
-
-          case "answer":
-            // Only process answer if it's not from our own connection
-            if (message.userId !== userIdRef.current) {
-              await peerConnectionRef.current?.setRemoteDescription(
-                new RTCSessionDescription(message.answer)
-              );
-            }
-            break;
-
-          case "ice-candidate":
-            // Only process ICE candidate if it's not from our own connection
-            if (message.userId !== userIdRef.current) {
-              await peerConnectionRef.current?.addIceCandidate(
-                new RTCIceCandidate(message.candidate)
-              );
-            }
-            break;
-
-          case "chat":
-            if (ENABLE_CHAT) {
-              console.log("Received chat message:", message);
-              setMessages((prev) => {
-                // Prevent duplicate messages
-                const isDuplicate = prev.some(
-                  (m) =>
-                    m.text === message.text &&
-                    m.sender === message.sender &&
-                    m.timestamp === message.timestamp
-                );
-                return isDuplicate ? prev : [...prev, message];
-              });
-            }
-            break;
-
-          case "room_participants":
-            console.log("Updated participants:", message.participants);
-            setParticipants(message.participants);
-            break;
-
-          default:
-            console.log("Unhandled message type:", message.type);
-        }
-      } catch (error) {
-        console.error("Error processing WebSocket message:", error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      setConnectionStatus("WebSocket Error");
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
-      setConnectionStatus("Disconnected");
-    };
-
-    // Setup WebRTC
-    setupWebRTC();
-
-    // Cleanup function
-    return () => {
-      ws.close();
-      peerConnectionRef.current?.close();
-      localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, [roomId, setupWebRTC, createPeerConnection, WS_BASE_URL, ENABLE_CHAT]);
+    sendWsMessage(message);
+    setMessages((prev) => [...prev, message]);
+    setNewMessage("");
+  }, [ENABLE_CHAT, newMessage, roomId, sendWsMessage]);
 
   // Toggle mic function
   const toggleMic = useCallback(() => {
@@ -294,11 +292,26 @@ function VideoCallRoom() {
     }
   }, [localStreamRef, isVideoOff]);
 
+  // WebRTC setup effect
+  useEffect(() => {
+    // Setup WebRTC
+    setupWebRTC();
+
+    // Cleanup function
+    return () => {
+      peerConnectionRef.current?.close();
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, [setupWebRTC]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Connection Status */}
+      {/* Connection Status and Error Display */}
       <div className="p-2 text-center bg-gray-100">
         Connection Status: {connectionStatus}
+        {wsError && (
+          <div className="text-red-500 ml-4">Error: {wsError.message}</div>
+        )}
       </div>
 
       <div className="flex flex-grow">
@@ -378,6 +391,7 @@ function VideoCallRoom() {
               ))}
             </div>
 
+            {/* Message Input */}
             <div className="flex">
               <input
                 type="text"
